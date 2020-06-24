@@ -2,30 +2,10 @@
 
 import socket
 import sys
-import time
 import logging
 import threading
-from getpass import getpass
 
-def reading(sock):
-	addr = sock.getsockname()
-	
-	while True:
-		data = sock.recv(1024).decode()
-		if not data: continue
-
-		sendname, message = data.split(" ", 1)
-		logging.info("Message received from {}.".format(sendname))
-
-
-def writing(sock):
-	addr = sock.getsockname()
-	
-	while True:
-		recvname, message = input(), input()
-		data = recvname + " " + message
-		sock.send(data.encode())
-		logging.info("Message sent to {}.".format(recvname))
+import client_action
 
 if __name__ == "__main__":
 	logging.basicConfig(level=logging.INFO)
@@ -40,15 +20,31 @@ if __name__ == "__main__":
 	logging.info("    Connect to server on {} port {}.".format(host, port))
 	logging.info("------------------- Client Log -------------------")
 
-	sock.send(input  ("Username: ").encode())
-	sock.send(getpass("Password: ").encode())
+	action_sign = ["", "R", "L"]
+	action_main = ["", "M", "A", "D"]
+	worker = client_login.Action(sock)
+	while True:
+		status = worker.get_status()
+		action = worker.get_action()
 
+		if (status == 1 and action not in action_sign) or \
+		   (status == 3 and action not in action_main):
+			worker.set_status(min(status // 2 * 2, 2))
+			worker.set_action("")
 
-	rt = threading.Thread(target = reading, args = (sock, ))
-	wt = threading.Thread(target = writing, args = (sock, ))
+		elif status == 0: worker.sign_menu()
+		elif status == 1: worker.sign_exec()
+		elif status == 2: worker.main_menu()
+		elif status == 3: worker.main_friend()
+		elif status == 3: worker.main_friend()
+		elif status == 4:
+			rt = threading.Thread(target = worker.main_reading)
+			wt = threading.Thread(target = worker.main_writing)
 
-	rt.start()
-	wt.start()
+			rt.start()
+			wt.start()
 
-	rt.join()
-	wt.join()
+			rt.join()
+			wt.join()
+
+			### TODO: handle thread at the same time

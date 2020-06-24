@@ -2,70 +2,18 @@
 
 import select
 import socket
-import os
 import sys
-import queue
 import logging
 
-userlist = {}
-
-def conversion(tag, convert_type):
-	return userlist[tag]
-
-def login(sock, loginstate):
-	addr = sock.getpeername()
-	if loginstate[addr][0] == 2: return True
-	
-	info = sock.recv(1024).decode()
-	if not info: return False
-
-	user = ""
-	flag = loginstate[addr][0] + 1
-	if flag == 1: user = info
-	if flag != 1: user = loginstate[addr][1]
-	loginstate[addr] = (flag, user)
-	## TODO: connect to db, check if correct
-
-	userlist[addr] = user
-	userlist[user] = addr
-	return False
-
-def reading(sock, processing_queue):
-	sendaddr = sock.getpeername()
-
-	# receive from sender
-	data = sock.recv(1024).decode()
-	if not data: return
-
-	# server processing
-	recvname, message = data.split(" ", 1)
-	recvaddr = conversion(recvname, 1)
-
-	if recvaddr not in processing_queue: processing_queue[recvaddr] = queue.Queue()
-	processing_queue[recvaddr].put((sendaddr, message))
-	logging.info("Message recv from {} to {}.".format(sendaddr[1], recvaddr[1]))
-	return
-
-def writing(sock, processing_queue):
-	recvaddr = sock.getpeername()
-
-	# server processing
-	if recvaddr not in processing_queue: return
-	sendaddr, message = processing_queue[recvaddr].get()
-	sendname = conversion(sendaddr, 0)
-
-	# send to receiver
-	data = sendname + " " + message
-	sock.send(data.encode())
-	logging.info("Message sent from {} to {}.".format(sendaddr[1], recvaddr[1]))
-
-	# delete processing_queue
-	if processing_queue[recvaddr].empty():
-		del processing_queue[recvaddr]
-	return
+import database
+import server_action
 
 if __name__ == "__main__":
 	logging.basicConfig(level=logging.INFO)
+
+	database.Account()
+	database.Friends()
+	database.Message()
 
 	host = str(sys.argv[1])
 	port = int(sys.argv[2])
@@ -78,15 +26,16 @@ if __name__ == "__main__":
 	server.bind((host, port))
 	server.listen(5)
 
-	logging.info("      Start up server on {} port {}.".format(host, port))
+	logging.info("Start up server on {} port {}.".format(host, port).center(50))
 	logging.info("------------------- Server Log -------------------")
 
 	# sockets to read and write
 	sockR = [server]
 	sockW = []
 
-	loginstate = {}
-	processing_queue = {}
+	worker = {}
+	action_sign = ["", "R", "L"]
+	action_main = ["", "M", "A", "D"]
 
 	while True:
 		# readable , writable , exceptional = select.select(sockR, sockW, sockR, timeout)
@@ -101,18 +50,33 @@ if __name__ == "__main__":
 				sockR.append(conn)
 				sockW.append(conn)
 				
-				loginstate[addr] = (0, "")
-				logging.info("Connection created.".format(addr))
+				worker[addr] = server_login.Action(conn)
+				logging.info("{}: Connection created.".format(addr))
 				continue
 
-			# processing login request
-			check = login(sock, loginstate)
-			if not check: continue
-			
-			# processing reading request
-			reading(sock, processing_queue)
 
+			# processing login request
+			addr = sock.getpeername()
+
+			status = worker[addr].get_status()
+			action = worker[addr].get_action()
+			if (status == 1 and action not in action_sign) or \
+			   (status == 3 and action not in action_main):
+				worker[addr].set_status(min(status // 2 * 2, 2))
+				worker[addr].set_action("")
+
+			elif status == 0: worker[addr].sign_menu()
+			elif status == 1: worker[addr].sign_exec()
+			elif status == 2: worker[addr].main_menu()
+			elif status == 3: worker[addr].main_friend()
+			elif status == 4: worker[addr].main_reading()
 
 		for sock in writable:
-			# processing writing request
-			writing(sock, processing_queue)
+			addr = sock.getpeername()
+
+			status = worker[addr].get_status()
+			action = worker[addr].get_action()
+			
+			if status == 4: worker[addr].main_writing()
+
+		### TODO: handle client interrupt
