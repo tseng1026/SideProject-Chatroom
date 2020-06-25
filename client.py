@@ -21,30 +21,38 @@ if __name__ == "__main__":
 	logging.info("------------------- Client Log -------------------")
 
 	action_sign = ["", "R", "L"]
-	action_main = ["", "M", "A", "D"]
-	worker = client_login.Action(sock)
+	action_main = ["", "M", "F", "P", "A", "D"]
+	worker = client_action.Action(sock)
 	while True:
 		status = worker.get_status()
 		action = worker.get_action()
 
-		if (status == 1 and action not in action_sign) or \
-		   (status == 3 and action not in action_main):
-			worker.set_status(min(status // 2 * 2, 2))
-			worker.set_action("")
+		if status == -1: break
 
-		elif status == 0: worker.sign_menu()
-		elif status == 1: worker.sign_exec()
-		elif status == 2: worker.main_menu()
-		elif status == 3: worker.main_friend()
-		elif status == 3: worker.main_friend()
-		elif status == 4:
-			rt = threading.Thread(target = worker.main_reading)
-			wt = threading.Thread(target = worker.main_writing)
+		try:
+			if (status == 1 and action not in action_sign) or \
+			   (status == 3 and action not in action_main):
+				worker.set_status(min(status // 2 * 2, 2))
+				worker.set_action("")
 
-			rt.start()
-			wt.start()
+			elif status == 0: worker.sign_menu()
+			elif status == 1: worker.sign_exec()
+			
+			elif status == 2: worker.main_menu()
+			elif status == 3: worker.main_friend_list()
+			elif status == 4: worker.main_friend_exec()
+			elif status == 5:
+				rt = threading.Thread(target = worker.main_reading)
+				wt = threading.Thread(target = worker.main_writing)
 
-			rt.join()
-			wt.join()
+				rt.start()
+				wt.start()
 
-			### TODO: handle thread at the same time
+				rt.join()
+				wt.join()
+
+				### TODO: handle thread at the same time
+		except:
+			worker.set_status(-1)
+
+	sock.close()

@@ -30,16 +30,15 @@ if __name__ == "__main__":
 	logging.info("------------------- Server Log -------------------")
 
 	# sockets to read and write
-	sockR = [server]
-	sockW = []
+	socket_list = []
 
 	worker = {}
 	action_sign = ["", "R", "L"]
-	action_main = ["", "M", "A", "D"]
+	action_main = ["", "M", "F", "P", "A", "D"]
 
 	while True:
 		# readable , writable , exceptional = select.select(sockR, sockW, sockR, timeout)
-		readable, writable, exceptional = select.select(sockR, sockW, sockR)
+		readable, writable, exceptional = select.select(socket_list + [server], socket_list, socket_list + [server])
 
 		for sock in readable:
 			# change the connection to client channel
@@ -47,10 +46,9 @@ if __name__ == "__main__":
 				sock.setblocking(0)
 
 				conn, addr = sock.accept()
-				sockR.append(conn)
-				sockW.append(conn)
+				socket_list.append(conn)
 				
-				worker[addr] = server_login.Action(conn)
+				worker[addr] = server_action.Action(conn)
 				logging.info("{}: Connection created.".format(addr))
 				continue
 
@@ -60,23 +58,56 @@ if __name__ == "__main__":
 
 			status = worker[addr].get_status()
 			action = worker[addr].get_action()
-			if (status == 1 and action not in action_sign) or \
-			   (status == 3 and action not in action_main):
-				worker[addr].set_status(min(status // 2 * 2, 2))
-				worker[addr].set_action("")
 
-			elif status == 0: worker[addr].sign_menu()
-			elif status == 1: worker[addr].sign_exec()
-			elif status == 2: worker[addr].main_menu()
-			elif status == 3: worker[addr].main_friend()
-			elif status == 4: worker[addr].main_reading()
+			try:
+				if status == -1: 
+					socket_list.remove(sock)
+					readable.   remove(sock)
+					writable.   remove(sock)
+					del worker[addr]
+
+					logging.info("{}: Connection closed.".format(addr))
+					continue
+			except:
+				pass
+			
+			try:
+				if (status == 1 and action not in action_sign) or \
+				   (status == 3 and action not in action_main):
+					worker[addr].set_status(min(status // 2 * 2, 2))
+					worker[addr].set_action("")
+					continue
+
+				if status == 0: worker[addr].sign_menu()
+				if status == 1: worker[addr].sign_exec()
+				if status == 2: worker[addr].main_menu()
+				if status == 4: worker[addr].main_friend_exec()
+				if status == 5: worker[addr].main_reading()
+			
+			except:
+				worker[addr].set_status(-1)
 
 		for sock in writable:
 			addr = sock.getpeername()
 
 			status = worker[addr].get_status()
 			action = worker[addr].get_action()
-			
-			if status == 4: worker[addr].main_writing()
 
-		### TODO: handle client interrupt
+			try:
+				if status == -1: 
+					socket_list.remove(sock)
+					readable.   remove(sock)
+					writable.   remove(sock)
+					del worker[addr]
+					
+					logging.info("{}: Connection closed.".format(addr))
+					continue
+			except:
+				pass
+
+			try:
+				if status == 3: worker[addr].main_friend_list()
+				if status == 5: worker[addr].main_writing()
+
+			except:
+				worker[addr].set_status(-1)

@@ -105,6 +105,20 @@ class Friends():
 			return bool(result[0])
 
 	@staticmethod
+	def friend(username, status):
+		with sqlite3.connect("server.db") as db:
+			cursor = db.cursor()
+
+			if not Account.exists(username): return False
+			var = [username, status]
+			cursor.execute("SELECT USER2 FROM FRIENDS WHERE USER1 = ? AND STATUS = ?", var)
+
+			result = cursor.fetchall()
+			if len(result) == 0: return [(" ", )]
+			if len(result) != 0: return result
+		return False
+
+	@staticmethod
 	def insert(username1, username2):
 		with sqlite3.connect("server.db") as db:
 			cursor = db.cursor()
@@ -186,6 +200,9 @@ class Message():
 
 			if not Account.exists(sendname): return False
 			if not Account.exists(recvname): return False
+			if not Friends.exists(sendname, recvname) and \
+			   not Friends.exists(sendname, recvname): return False
+			
 			var = [sendname, recvname, content]
 			cursor.execute("INSERT INTO MESSAGE (SEND, RECV, CONTENT) VALUES (?, ?, ?)", var)
 

@@ -2,6 +2,7 @@
 
 import socket
 import logging
+from hashlib import sha256
 from getpass import getpass
 
 class Action():
@@ -33,9 +34,9 @@ class Action():
 	
 	def sign_exec(self):
 		# input username and password
-		username = input  ("Username: ")
-		password = getpass("Password: ")
-		if self.action == "R": verified = getpass("Verified: ")
+		username = input("Username: ")
+		password = sha256(getpass("Password: ").encode()).hexdigest()
+		if self.action == "R": verified = sha256(getpass("Verified: ").encode()).hexdigest()
 
 		# send to the server
 		if self.action == "R" and password != verified: return
@@ -51,16 +52,30 @@ class Action():
 		if result == "P": self.action, self.status, self.username = "", 2, username
 		return
 
-
 	### main function
 	def main_menu(self):
 		self.action = input("Message (M), Add Friend (A), Delete Friend (D), Blocklist (B): ")
-		if self.action == "A" or self.action == "D": self.status = 3
-		if self.action == "M": self.status = 4
+		if self.action == "F" or self.action == "P": self.status = 3
+		if self.action == "A" or self.action == "D": self.status = 4
+		if self.action == "M": self.status = 5
 		self.socket.send(self.action.encode())
 		return
 
-	def main_friend(self):
+	def main_friend_list(self):
+		# recv from the server
+		data = self.socket.recv(1024).decode()
+		if not data: return
+		friend, pending = data.split("\n")
+		print ("FRIEND:  {}".format(friend))
+		print ("PENDING: {}".format(pending))
+
+		# update logs
+		logging.info("[Action {}] {} friend list.".format(self.action, self.username))
+		if self.action == "F": self.status = 2
+		if self.action == "P": self.status = 4
+		return
+
+	def main_friend_exec(self):
 		# input peername
 		peername = input("Peername: ")
 
@@ -83,7 +98,7 @@ class Action():
 			data = self.socket.recv(1024).decode()
 			if not data: continue
 			sendname, content = data.split("\n", 1)
-
+			print (data)
 			# update logs
 			logging.info("[Action {}] {} message recv.".format(self.action, self.username))
 		return
