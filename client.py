@@ -1,9 +1,9 @@
 # coding='utf-8'
 
+import select
 import socket
 import sys
 import logging
-import threading
 
 import client_action
 
@@ -14,45 +14,48 @@ if __name__ == "__main__":
 	port = int(sys.argv[2])
 
 	# Create a TCP/IP socket
-	sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-	sock.connect((host, port))
+	server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+	server.connect((host, port))
 
 	logging.info("    Connect to server on {} port {}.".format(host, port))
 	logging.info("------------------- Client Log -------------------")
 
+	socket_list = [server]
+
 	action_sign = ["", "R", "L"]
 	action_main = ["", "M", "F", "P", "A", "D"]
-	worker = client_action.Action(sock)
+	worker = client_action.Action(server)
+	
 	while True:
-		status = worker.get_status()
-		action = worker.get_action()
+		readable, writable, exceptional = select.select(socket_list + [sys.stdin], socket_list + [sys.stdout], socket_list, 5)
 
-		if status == -1: break
+		for sock in writable:
+			try:
+				data = ""
+				if sock is server    : data = worker.get_inputs()
+				if sock is sys.stdout: data = worker.get_helper()
 
-		try:
-			if (status == 1 and action not in action_sign) or \
-			   (status == 3 and action not in action_main):
-				worker.set_status(min(status // 2 * 2, 2))
-				worker.set_action("")
+				if data == ""  : continue
 
-			elif status == 0: worker.sign_menu()
-			elif status == 1: worker.sign_exec()
-			
-			elif status == 2: worker.main_menu()
-			elif status == 3: worker.main_friend_list()
-			elif status == 4: worker.main_friend_exec()
-			elif status == 5:
-				rt = threading.Thread(target = worker.main_reading)
-				wt = threading.Thread(target = worker.main_writing)
+				if sock is server:     sock.send(data[:-1].encode())
+				if sock is sys.stdout: sys.stdout.write(data); sys.stdout.flush()
 
-				rt.start()
-				wt.start()
+				if sock is server: worker.server_writing()
+				k += 1
+			except:
+				pass
 
-				rt.join()
-				wt.join()
+		for sock in readable:
+			try:
+				if sock is server   : data = sock.recv(1024).decode()
+				if sock is sys.stdin: data = sys.stdin.readline()
 
-				### TODO: handle thread at the same time
-		except:
-			worker.set_status(-1)
+				if data == ""  : continue
+				if data == "q!": worker.set_action(""); continue
+				
+				if sock is server   : worker.server_reading(data)
+				if sock is sys.stdin: worker.client_reading(data)
 
+			except:
+				pass
 	sock.close()

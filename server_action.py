@@ -10,114 +10,54 @@ class Action():
 		self.address = socket.getpeername()
 
 		self.action = ""
-		self.status = 0
+		self.result = ""
+
 		self.username = ""
 		self.peername = ""
 
-	### status info
-	def get_status(self): return self.status	
-	def set_status(self, status):
-		self.status = status
-		return
-
-	### action info
 	def get_action(self): return self.action
 	def set_action(self, action):
 		self.action = action
 		return
 
-	### signup or signin
-	def sign_menu(self):
-		self.status = 1
-		self.action = self.socket.recv(1024).decode()
-		if not self.action: self.status = -1; return
-		logging.info("{}: Choose action {}.".format(self.address, self.action))
+	def get_result(self): return self.result
+	def set_result(self, result):
+		self.result = result
 		return
 
-	def sign_exec(self):
-		# recv from the client (content)
-		info = self.socket.recv(1024).decode()
-		if not info: self.status = -1; return
-		username, password = info.split("\n")
+	def client_reading(self, data):
+		data = data.split("\n")
 
-		# send to the client (shake)
-		result = "F"
-		if self.action == "L" and database.Account.verify(username, password, self.address): result = "P"
-		if self.action == "R" and database.Account.insert(username, password, self.address): result = "P"
-		self.socket.send(result.encode())
+		self.result = "Fail"
+		if   self.action == "": self.result = data[0]
+		elif self.action == "R" and database.Account.insert(data[0], data[1], self.address): self.result = "Pass"
+		elif self.action == "L" and database.Account.verify(data[0], data[1], self.address): self.result = "Pass"
+		elif self.action == "A" and database.Friends.insert(data[0], data[1]): self.result = "Pass"
+		elif self.action == "D" and database.Friends.delete(data[0], data[1]): self.result = "Pass"
+		elif self.action == "P" and database.Friends.accept(data[0], data[1]): self.result = "Pass"
+		elif self.action == "F":
+			tmp1 = "Friend:  " + '\t'.join([item[0] for item in database.Friends.friend(data[0], 1)])
+			tmp2 = "Pending: " + '\t'.join([item[0] for item in database.Friends.friend(data[0], 0)])
+			if tmp1 != False and tmp2 != False: self.result = "Pass" + "\n" + tmp1 + "\n" + tmp2 + "\n"
 
-		# update logs
-		if result == "P": self.action, self.status, self.username = "", 2, username
-		logging.info("{}: User \"{}\" logins ({}).".format(self.address, username, result))
+		action_signin = ["R", "L"]
+		action_friend = ["F", "P", "A", "D"]
+		if self.action in action_signin and self.result == "Pass": self.username = data[0]
+		if self.action in action_friend and self.result == "Pass": self.peername = data[1]
 		return
-
-	### main function
-	def main_menu(self):
-		self.action = self.socket.recv(1024).decode()
-		if self.action == "F" or self.action == "P": self.status = 3
-		if self.action == "A" or self.action == "D": self.status = 4
-		if self.action == "M": self.status = 5
-		if not self.action: self.status = -1; return
-		logging.info("{}: Choose action {}.".format(self.address, self.action))
-		return
-
-	def main_friend_exec(self):
-		# recv from the client (content)
-		data = self.socket.recv(1024).decode()
-		if not data: self.status = -1; return
-		username, peername = data.split("\n")
-
-		# send to the client (shake)
-		result = "F"
-		if self.action == "A" and database.Friends.insert(username, peername): result = "P"
-		if self.action == "D" and database.Friends.delete(username, peername): result = "P"
-		if self.action == "P" and database.Friends.accept(username, peername): result = "P"
-		self.socket.send(result.encode())
 		
-		# update logs
-		if result == "P": self.action, self.status = "", 2
-		logging.info("{}: User \"{}\" adds / deletes / accepts friend \"{}\" ({}).".format(self.address, username, peername, result))
+	def client_writing(self):
+		info = [self.address, self.action, self.result[:4], self.username, self.peername]
+		if   self.action == "" : logging.info("{}: [Action {}]".format(self.address, self.result))
+		elif self.action == "R": logging.info("{}: [Action {}] **{}** \"{}\" register.".       format(*info[:-1]))
+		elif self.action == "L": logging.info("{}: [Action {}] **{}** \"{}\" login.".          format(*info[:-1]))
+		elif self.action == "A": logging.info("{}: [Action {}] **{}** \"{}\" create friendship \"{}\".".format(*info))
+		elif self.action == "D": logging.info("{}: [Action {}] **{}** \"{}\" remove friendship \"{}\".".format(*info))
+		elif self.action == "P": logging.info("{}: [Action {}] **{}** \"{}\" accept friendship \"{}\".".format(*info))
+		elif self.action == "F": logging.info("{}: [Action {}] **{}** \"{}\" get friend list.".format(*info[:-1]))
+		else: logging.warning("{}: [Action {}] Not exists.".format(self.address, self.action))
+
+		if   self.action == "": self.action = self.result
+		elif self.action != "" and self.result[:4] == "Pass": self.action = ""
+		self.result = ""
 		return
-
-	def main_friend_list(self):
-		# send to the client
-		data1 = database.Friends.friend(self.username, 1)
-		data2 = database.Friends.friend(self.username, 0)
-		if not data1 or not data2: return
-
-		data = ""
-		data += " ".join(str(x[0]) for x in data1) + "\n"
-		data += " ".join(str(x[0]) for x in data2)
-		print (data)
-		# data = self.peername + "\n" + content
-		self.socket.send(data.encode())
-
-		# update logs
-		logging.info("{}: User \"{}\"\'s friend list.".format(self.address, self.username))
-		if self.action == "F": self.status = 2
-		if self.action == "P": self.status = 4
-		return
-
-	def main_reading(self):
-		# recv from the client
-		data = self.socket.recv(1024).decode()
-		if not data: self.status = -1; return
-		self.username, self.peername, content = data.split("\n", 2)
-		database.Message.insert(self.username, self.peername, content)
-
-		# update logs
-		logging.info("{}: User \"{}\" to user \"{}\"\'s message accepted by server.".format(self.address, self.username, self.peername))
-		return
-
-	def main_writing(self):
-		# send to the client
-		content = database.Message.delete(self.peername, self.username)
-		if not content: return
-		
-		data = self.peername + "\n" + content
-		self.socket.send(data.encode())
-
-		# update logs
-		logging.info("{}: User \"{}\" to user \"{}\"\'s message transfered by server.".format(self.address, self.username, self.peername))
-		return
-

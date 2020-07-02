@@ -111,9 +111,12 @@ class Friends():
 
 			if not Account.exists(username): return False
 			var = [username, status]
-			cursor.execute("SELECT USER2 FROM FRIENDS WHERE USER1 = ? AND STATUS = ?", var)
-
+			cursor.execute("SELECT USER1 FROM FRIENDS WHERE USER2 = ? AND STATUS = ?", var)
 			result = cursor.fetchall()
+
+			cursor.execute("SELECT USER2 FROM FRIENDS WHERE USER1 = ? AND STATUS = ?", var)
+			result += cursor.fetchall()
+
 			if len(result) == 0: return [(" ", )]
 			if len(result) != 0: return result
 		return False
@@ -123,6 +126,7 @@ class Friends():
 		with sqlite3.connect("server.db") as db:
 			cursor = db.cursor()
 
+			if username1 == username2: return False
 			if not Account.exists(username1): return False
 			if not Account.exists(username2): return False
 			if Friends.exists(username1, username2): return False
@@ -141,14 +145,10 @@ class Friends():
 
 			if not Account.exists(username1): return False
 			if not Account.exists(username2): return False
-			if not Friends.exists(username1, username2) and \
-			   not Friends.exists(username2, username1): return False
+			if not Friends.exists(username2, username1): return False
 
-			var = []
-			if Friends.exists(username1, username2): var = [username1, username2]
-			if Friends.exists(username2, username1): var = [username2, username1]
+			var = [username2, username1]
 			cursor.execute("UPDATE FRIENDS SET STATUS = 1 WHERE USER1 = ? AND USER2 = ?", var)
-
 			db.commit()
 			return True
 		return False

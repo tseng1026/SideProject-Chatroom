@@ -8,16 +8,17 @@ from getpass import getpass
 class Action():
 	def __init__(self, socket):
 		self.socket = socket
+		self.address = socket.getpeername()
+		
 		self.action = ""
-		self.status = 0
+		self.inputs = ""
+		self.result = ""
+
 		self.username = ""
 		self.peername = ""
 
-	### status info
-	def get_status(self): return self.status	
-	def set_status(self, status):
-		self.status = status
-		return
+		self.status = 1
+		self.note = []
 
 	### action info
 	def get_action(self): return self.action
@@ -25,93 +26,72 @@ class Action():
 		self.action = action
 		return
 
-	### signup or signin
-	def sign_menu(self):
+	def notice(self):
+		if   self.action == "" : self.note = ["Action: "]
+		elif self.action == "R": self.note = ["Username: ", "Password: "]
+		elif self.action == "L": self.note = ["Username: ", "Password: "]
+		elif self.action == "A": self.note = ["", "Peername: "]
+		elif self.action == "D": self.note = ["", "Peername: "]
+		elif self.action == "P": self.note = ["", "Peername: "]
+		elif self.action == "F": self.note = [""]
+		return 
+
+	def get_inputs(self):
+		self.notice()
+		length1 = len(self.note)
+		length2 = len(self.inputs.split("\n")) - 1
+		if length1 != length2: return ""
+		if length1 == length2: return self.inputs
+	def set_inputs(self, inputs):
+		self.inputs = inputs
+		return
+
+	def get_helper(self):
+		if self.result != "":
+			self.result, data = "", self.result
+			return data
+
+		self.notice()
+		length1 = len(self.note)
+		length2 = len(self.inputs.split("\n")) - 1
+		if self.status == 0: return ""
+		if self.status == 1: self.status = 0; return self.note[length2]
+
+	def server_writing(self):
+		self.inputs = ""
+		self.status = 0
+		return
+
+	def client_reading(self, data):
+		action_signin = ["R", "L"]
+		action_friend = ["F", "P", "A", "D"]
+		if self.action in action_signin and self.inputs == "": self.username = data[:-1]
+		if self.action in action_friend and self.inputs == "": self.peername = data[:-1]
+
+		self.inputs += data
 		self.status = 1
-		self.action = input("Register (R), Login (L): ")
-		self.socket.send(self.action.encode())
-		return
-	
-	def sign_exec(self):
-		# input username and password
-		username = input("Username: ")
-		password = sha256(getpass("Password: ").encode()).hexdigest()
-		if self.action == "R": verified = sha256(getpass("Verified: ").encode()).hexdigest()
-
-		# send to the server
-		if self.action == "R" and password != verified: return
-		info = username + "\n" + password
-		self.socket.send(info.encode())
-
-		# recv from the server
-		result = self.socket.recv(1024).decode()
-
-		# update logs
-		if result == "F": logging.info("[Action {}] {} login fail.".format(self.action, username))
-		if result == "P": logging.info("[Action {}] {} login pass.".format(self.action, username))
-		if result == "P": self.action, self.status, self.username = "", 2, username
 		return
 
-	### main function
-	def main_menu(self):
-		self.action = input("Message (M), Add Friend (A), Delete Friend (D), Blocklist (B): ")
-		if self.action == "F" or self.action == "P": self.status = 3
-		if self.action == "A" or self.action == "D": self.status = 4
-		if self.action == "M": self.status = 5
-		self.socket.send(self.action.encode())
-		return
+	def server_reading(self, data):
+		data = data.split("\n")
 
-	def main_friend_list(self):
-		# recv from the server
-		data = self.socket.recv(1024).decode()
-		if not data: return
-		friend, pending = data.split("\n")
-		print ("FRIEND:  {}".format(friend))
-		print ("PENDING: {}".format(pending))
+		info = [self.action, data[0], self.username, self.peername]
+		if   self.action == "" : logging.info("[Action {}]".format(data[0]))
+		elif self.action == "R": logging.info("[Action {}] **{}** \"{}\" register.".       format(*info[:-1]))
+		elif self.action == "L": logging.info("[Action {}] **{}** \"{}\" login.".          format(*info[:-1]))
+		elif self.action == "A": logging.info("[Action {}] **{}** \"{}\" create friendship \"{}\".".format(*info))
+		elif self.action == "D": logging.info("[Action {}] **{}** \"{}\" remove friendship \"{}\".".format(*info))
+		elif self.action == "P": logging.info("[Action {}] **{}** \"{}\" accept friendship \"{}\".".format(*info))
+		elif self.action == "F": logging.info("[Action {}] **{}** \"{}\" get friend list.".format(*info[:-1]))
+		else: logging.warning("{}: [Action {}] Not exists.".format(self.address, self.action))
 
-		# update logs
-		logging.info("[Action {}] {} friend list.".format(self.action, self.username))
-		if self.action == "F": self.status = 2
-		if self.action == "P": self.status = 4
-		return
-
-	def main_friend_exec(self):
-		# input peername
-		peername = input("Peername: ")
-
-		# send to the server
-		data = self.username + "\n" + peername
-		self.socket.send(data.encode())
-
-		# recv from the server
-		result = self.socket.recv(1024).decode()
-
-		# update logs
-		if result == "F": logging.info("[Action {}] {} friend fail.".format(self.action, self.username))
-		if result == "P": logging.info("[Action {}] {} friend pass.".format(self.action, self.username))
-		if result == "P": self.action, self.status = "", 2
-		return
-
-	def main_reading(self):
-		while True:
-			# recv from the server
-			data = self.socket.recv(1024).decode()
-			if not data: continue
-			sendname, content = data.split("\n", 1)
-			print (data)
-			# update logs
-			logging.info("[Action {}] {} message recv.".format(self.action, self.username))
-		return
-
-	def main_writing(self):
-		while True:
-			# input recvname and content
-			recvname, content = input(), input()
-
-			# send to the server
-			data = self.username + "\n" + recvname + "\n" + content
-			self.socket.send(data.encode())
-
-			# update logs
-			logging.info("[Action {}] {} message sent.".format(self.action, self.username))
+		if   self.action == "": self.action = data[0]
+		elif self.action != "" and data[0] == "Pass": self.action = ""
+		
+		action_friend = ["F", "P", "A", "D"]
+		if self.action in action_friend: self.inputs = self.username + "\n"
+		else: self.inputs = ""
+		
+		self.status = 1
+		if len(data) != 1: self.result = '\n'.join(data[1:])
 		return

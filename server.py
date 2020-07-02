@@ -33,8 +33,7 @@ if __name__ == "__main__":
 	socket_list = []
 
 	worker = {}
-	action_sign = ["", "R", "L"]
-	action_main = ["", "M", "F", "P", "A", "D"]
+	
 
 	while True:
 		# readable , writable , exceptional = select.select(sockR, sockW, sockR, timeout)
@@ -52,62 +51,39 @@ if __name__ == "__main__":
 				logging.info("{}: Connection created.".format(addr))
 				continue
 
-
-			# processing login request
-			addr = sock.getpeername()
-
-			status = worker[addr].get_status()
-			action = worker[addr].get_action()
-
 			try:
-				if status == -1: 
-					socket_list.remove(sock)
-					readable.   remove(sock)
-					writable.   remove(sock)
-					del worker[addr]
+				addr = sock.getpeername()
+				data = sock.recv(1024).decode()
+				
+				# if data == ""  : worker[addr].set_status(-1); continue
+				if data == ""  : continue
+				if data == "q!": worker[addr].set_action(""); continue
+				worker[addr].client_reading(data)
 
-					logging.info("{}: Connection closed.".format(addr))
-					continue
 			except:
 				pass
 			
-			try:
-				if (status == 1 and action not in action_sign) or \
-				   (status == 3 and action not in action_main):
-					worker[addr].set_status(min(status // 2 * 2, 2))
-					worker[addr].set_action("")
-					continue
-
-				if status == 0: worker[addr].sign_menu()
-				if status == 1: worker[addr].sign_exec()
-				if status == 2: worker[addr].main_menu()
-				if status == 4: worker[addr].main_friend_exec()
-				if status == 5: worker[addr].main_reading()
-			
-			except:
-				worker[addr].set_status(-1)
 
 		for sock in writable:
-			addr = sock.getpeername()
-
-			status = worker[addr].get_status()
-			action = worker[addr].get_action()
-
 			try:
-				if status == -1: 
-					socket_list.remove(sock)
-					readable.   remove(sock)
-					writable.   remove(sock)
-					del worker[addr]
-					
-					logging.info("{}: Connection closed.".format(addr))
-					continue
+				addr = sock.getpeername()
+				data = worker[addr].get_result()
+
+				if data == ""  : continue
+				sock.send(data.encode())
+				worker[addr].client_writing()
+
 			except:
 				pass
+			# try:
+			# 	if status == -1: 
+			# 		socket_list.remove(sock)
+			# 		readable.   remove(sock)
+			# 		writable.   remove(sock)
+			# 		del worker[addr]
+					
+			# 		logging.info("{}: **Done** Connection closed.".format(addr))
+			# 		continue
+			# except:
+			# 	pass
 
-			try:
-				if status == 3: worker[addr].main_friend_list()
-				if status == 5: worker[addr].main_writing()
-
-			except:
-				worker[addr].set_status(-1)
